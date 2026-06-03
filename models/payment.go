@@ -6,7 +6,7 @@ import "gorm.io/gorm"
 type MpesaTransaction struct {
 	gorm.Model
 	ClientID          uint
-	CheckoutRequestID string  `gorm:"uniqueIndex"`
+	CheckoutRequestID string  `gorm:"size:255;uniqueIndex"`
 	Amount            float64 // Fiat amount
 	Credits           int64   // Calculated credits based on their rate at the time
 	Status            string  // "PENDING", "SUCCESS", "FAILED"

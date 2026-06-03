@@ -8,8 +8,6 @@ import (
 	"wallet/models"
 )
 
-// @Summary Billing History / Ledger Table
-
 // ListLedger returns the history of transactions for the Dashboard with pagination
 func (ctr *Controller) ListLedger(ctx *gin.Context) {
 	userClientID := ctx.MustGet("client_id").(uint)
@@ -136,10 +134,8 @@ func (ctr *Controller) AdminWalletSummary(ctx *gin.Context) {
 
 	// Optional client filter for the summary
 	targetClient := ctx.Query("client_id")
-	clientFilter := ""
 	var args []interface{}
 	if targetClient != "" {
-		clientFilter = "client_id = ?"
 		args = append(args, targetClient)
 	}
 

@@ -123,4 +123,8 @@ func (a *App) RegisterWalletRoutes(rg *gin.RouterGroup) {
 		adminWallet.POST("/adjust", a.ManualAdjustment)
 		adminWallet.PUT("/config/:id", a.UpdateClientConfig)
 	}
+	adminWallet.Use(middleware.RoleAuth("read billing"))
+	{
+		adminWallet.GET("/summary", a.AdminWalletSummary)
+	}
 }

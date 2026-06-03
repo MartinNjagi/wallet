@@ -7,7 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"identity/data"
+	"wallet/data"
 )
 
 var (
