@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 
 	"wallet/data"
 	"wallet/models"
@@ -13,19 +14,49 @@ import (
 // GetBalance returns the real-time active balance for the tenant
 // @Summary Client Wallet Balance
 func (ctr *Controller) GetBalance(ctx *gin.Context) {
-	clientID := ctx.MustGet("client_id").(uint)
-
-	var wallet models.Wallet
-	if err := ctr.DB.Where("client_id = ?", clientID).First(&wallet).Error; err != nil {
-		// Return 0 if they've never transacted
-		ctx.JSON(http.StatusOK, gin.H{"client_id": clientID, "balance": 0, "currency": "KES"})
+	// Use the same helper from ListLedger
+	tokenClientID, exists := getClientID(ctx)
+	if !exists {
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, data.WalletBalanceResponse{
+	targetClientID := tokenClientID
+
+	// SUPERADMIN VISIBILITY GATE (Matches ListLedger logic)
+	if tokenClientID == 1 {
+		if targetQuery := ctx.Query("client_id"); targetQuery != "" {
+			if parsedID, err := strconv.ParseUint(targetQuery, 10, 32); err == nil {
+				targetClientID = uint(parsedID)
+			}
+		}
+	}
+
+	var wallet models.Wallet
+	if err := ctr.DB.Where("client_id = ?", targetClientID).First(&wallet).Error; err != nil {
+		// Return 0 if they've never transacted
+		SendJSON(ctx, data.APIResponse{
+			Status: http.StatusOK,
+			Data: data.WalletBalanceResponse{
+				ClientID: int64(targetClientID),
+				Balance:  0,
+				Currency: data.DefaultCurrency,
+			},
+		})
+		return
+	}
+
+	resp := data.WalletBalanceResponse{
 		ClientID: int64(wallet.ClientID),
 		Balance:  wallet.Balance,
 		Currency: wallet.Currency,
+	}
+	SendJSON(ctx, data.APIResponse{
+		Status: http.StatusOK,
+		Data:   &resp,
 	})
 }
 
@@ -102,7 +133,7 @@ func (ctr *Controller) MpesaWebhook(ctx *gin.Context) {
 
 	// 4. If success, credit the wallet using the Core Ledger Engine!
 	err := ctr.ApplyWalletOperation(
-		ctr.DB, WalletOperation{
+		ctr.DB, data.WalletOperation{
 			ClientID:    mpesaTx.ClientID,
 			Action:      data.WalletActionCredit,
 			Credits:     mpesaTx.Credits,
@@ -133,13 +164,19 @@ func (ctr *Controller) MpesaWebhook(ctx *gin.Context) {
 // @Summary SuperAdmin Manual Adjustments
 func (ctr *Controller) ManualAdjustment(ctx *gin.Context) {
 	if ctx.MustGet("client_id").(uint) != 1 {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "SuperAdmin access required"})
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusForbidden,
+			Message: "SuperAdmin access required",
+		})
 		return
 	}
 
 	var req data.ManualAdjustmentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid payload",
+		})
 		return
 	}
 
@@ -147,7 +184,7 @@ func (ctr *Controller) ManualAdjustment(ctx *gin.Context) {
 	adminID := ctx.GetUint("user_id")
 	refID := fmt.Sprintf("%d_%s", adminID, generateSecureToken(6))
 
-	err := ctr.ApplyWalletOperation(ctr.DB, WalletOperation{
+	err := ctr.ApplyWalletOperation(ctr.DB, data.WalletOperation{
 		ClientID:    req.ClientID,
 		Action:      data.WalletAction(req.Action),
 		Credits:     req.Credits,
@@ -159,24 +196,36 @@ func (ctr *Controller) ManualAdjustment(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusInternalServerError,
+			Message: err.Error(),
+		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "Wallet adjusted successfully"})
+	SendJSON(ctx, data.APIResponse{
+		Status:  http.StatusOK,
+		Message: "Wallet adjusted successfully",
+	})
 }
 
 // UpdateClientConfig allows admins to modify individual tenant SMS rates
 func (ctr *Controller) UpdateClientConfig(ctx *gin.Context) {
 	if ctx.MustGet("client_id").(uint) != 1 {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "SuperAdmin access required"})
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusForbidden,
+			Message: "SuperAdmin access required",
+		})
 		return
 	}
 
 	targetClientID := ctx.Param("id")
 	var req data.UpdateBillingConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid payload",
+		})
 		return
 	}
 
@@ -192,5 +241,8 @@ func (ctr *Controller) UpdateClientConfig(ctx *gin.Context) {
 
 	ctr.DB.Save(&config)
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "Client billing configuration updated"})
+	SendJSON(ctx, data.APIResponse{
+		Status:  http.StatusOK,
+		Message: "Client billing configuration updated",
+	})
 }

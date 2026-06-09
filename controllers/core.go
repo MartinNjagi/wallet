@@ -79,17 +79,13 @@ func (ctr *Controller) LogAudit(tx *gorm.DB, params data.AuditLogParams) error {
 	return tx.Create(&audit).Error
 }
 
-// HasClientAccess checks if the current request is authorized to modify the target client ID.
-func (ctr *Controller) HasClientAccess(ctx *gin.Context, targetClientID uint) bool {
-	callerClientID := ctx.MustGet("client_id").(uint)
-
-	// Global admin access
-	if callerClientID == 1 {
-		return true
+// getClientID securely extracts the client_id from the context session.
+func getClientID(ctx *gin.Context) (uint, bool) {
+	val, exists := ctx.Get("client_id")
+	if !exists {
+		return 0, false
 	}
-
-	// Standard tenant access
-	return callerClientID == targetClientID
+	return val.(uint), true
 }
 
 func normalizePhoneStr(phone string) string {

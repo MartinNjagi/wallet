@@ -11,20 +11,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-type WalletOperation struct {
-	ClientID    uint
-	Action      data.WalletAction
-	Credits     int64 // always positive
-	Type        string
-	Description string
-	Reference   string
-	FiatPaid    *float64
-	Currency    *string
-}
-
 // ApplyWalletOperation is the central ACID-compliant ledger writer.
 // It uses row-level locking (SELECT FOR UPDATE) to prevent race conditions during high-throughput SMS bursts.
-func (ctr *Controller) ApplyWalletOperation(db *gorm.DB, op WalletOperation) error {
+func (ctr *Controller) ApplyWalletOperation(db *gorm.DB, op data.WalletOperation) error {
 	if op.Credits <= 0 {
 		return errors.New("credits must be positive")
 	}
@@ -118,15 +107,16 @@ func (ctr *Controller) ApplyWalletOperation(db *gorm.DB, op WalletOperation) err
 }
 
 // ProcessCampaignRefund handles bulk refunds for failed messages in a specific campaign/batch
-func (ctr *Controller) ProcessCampaignRefund(clientID uint, campaignID string, failedCount int64) error {
+func (ctr *Controller) ProcessCampaignRefund(req data.RefundCreditRequest) error {
 	// If there were no failures, skip processing
+	failedCount := int64(req.Amount)
 	if failedCount <= 0 {
 		return nil
 	}
 
 	var config models.ClientBillingConfig
 	// Get config, default to refunding if config table entry is missing
-	if err := ctr.DB.Where("client_id = ?", clientID).FirstOrCreate(&config, models.ClientBillingConfig{ClientID: clientID, RefundOnFailedDelivery: true}).Error; err != nil {
+	if err := ctr.DB.Where("client_id = ?", req.ClientID).FirstOrCreate(&config, models.ClientBillingConfig{ClientID: req.ClientID, RefundOnFailedDelivery: true}).Error; err != nil {
 		return err
 	}
 
@@ -139,12 +129,12 @@ func (ctr *Controller) ProcessCampaignRefund(clientID uint, campaignID string, f
 	// Refund the total failed credits in one bulk transaction
 	err := ctr.ApplyWalletOperation(
 		ctr.DB,
-		WalletOperation{
-			ClientID:    clientID,
+		data.WalletOperation{
+			ClientID:    req.ClientID,
 			Action:      data.WalletActionCredit,
 			Credits:     failedCount,
 			Type:        data.RefPrefixRev,
-			Reference:   campaignID,
+			Reference:   req.CampaignID,
 			Description: fmt.Sprintf("Bulk refund for %d failed SMS in campaign", failedCount),
 		},
 	)
@@ -158,20 +148,21 @@ func (ctr *Controller) ProcessCampaignRefund(clientID uint, campaignID string, f
 
 // DeductCampaignCredits handles the bulk deduction for a campaign before sending starts.
 // The SMS engine must call this to lock in the funds required for the whole campaign.
-func (ctr *Controller) DeductCampaignCredits(clientID uint, campaignID string, totalCredits int64) error {
-	if totalCredits <= 0 {
+func (ctr *Controller) DeductCampaignCredits(req data.DeductCreditRequest) error {
+	if req.Amount <= 0 {
 		return nil
 	}
 
+	totalCredits := int64(req.Amount)
 	// Deduct the total credits in one bulk transaction
 	err := ctr.ApplyWalletOperation(
 		ctr.DB,
-		WalletOperation{
-			ClientID:    clientID,
+		data.WalletOperation{
+			ClientID:    req.ClientID,
 			Action:      data.WalletActionDebit,
 			Credits:     totalCredits,
 			Type:        data.RefPrefixSMS,
-			Reference:   campaignID,
+			Reference:   req.CampaignID,
 			Description: fmt.Sprintf("Bulk deduction for %d SMS in campaign", totalCredits),
 		},
 	)

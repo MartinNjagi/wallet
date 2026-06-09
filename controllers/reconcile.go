@@ -9,7 +9,7 @@ import (
 	"wallet/models"
 )
 
-// ReconcilePendingMpesaTransactions should be hooked to a cron scheduler (e.g., robfig/cron)
+// ReconcilePendingMpesaTransactions should be hooked to a cron scheduler (e.g., cron)
 // to run every ~5 minutes. It catches transactions where Safaricom dropped the callback.
 func (ctr *Controller) ReconcilePendingMpesaTransactions() {
 	logrus.Info("[Cron] Running M-Pesa Reconciliation...")
@@ -30,7 +30,7 @@ func (ctr *Controller) ReconcilePendingMpesaTransactions() {
 		if isPaid {
 			// 2. It was successful, but webhook dropped. Apply to Wallet Ledger.
 			err := ctr.ApplyWalletOperation(
-				ctr.DB, WalletOperation{
+				ctr.DB, data.WalletOperation{
 					ClientID:    tx.ClientID,
 					Action:      data.WalletActionCredit,
 					Credits:     tx.Credits,

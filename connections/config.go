@@ -38,6 +38,13 @@ func InitConfig() *data.AppConfig {
 		JWTSecret:            mustGetEnv("JWT_SECRET"),
 		InternalServiceToken: mustGetEnv("INTERNAL_SERVICE_TOKEN"),
 		Env:                  mustGetEnv("APP_ENV"),
+
+		SenderID: mustGetEnv("SENDER_ID"),
+
+		IdentityServiceURL: mustGetEnv("IDENTITY_SERVICE_URL"),
+		WalletServiceURL:   mustGetEnv("WALLET_SERVICE_URL"),
+		SDPServiceURL:      mustGetEnv("SDP_SERVICE_URL"),
+		SMSServiceURL:      mustGetEnv("SMS_SERVICE_URL"),
 	}
 
 	logrus.Info("✓ Config initialized")

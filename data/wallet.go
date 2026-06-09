@@ -18,3 +18,14 @@ type UpdateBillingConfigRequest struct {
 	BaseSmsRate            *float64 `json:"base_sms_rate"`
 	RefundOnFailedDelivery *bool    `json:"refund_on_failed_delivery"`
 }
+
+type WalletOperation struct {
+	ClientID    uint
+	Action      WalletAction
+	Credits     int64 // always positive
+	Type        string
+	Description string
+	Reference   string
+	FiatPaid    *float64
+	Currency    *string
+}

@@ -10,14 +10,19 @@ import (
 
 // ListLedger returns the history of transactions for the Dashboard with pagination
 func (ctr *Controller) ListLedger(ctx *gin.Context) {
-	userClientID := ctx.MustGet("client_id").(uint)
+	clientID, exists := getClientID(ctx)
+	if !exists {
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized"})
+	}
 	page, pageSize, offset := getPaginationParams(ctx)
 
 	query := ctr.DB.Model(&models.WalletTransaction{})
 
 	// MULTI-TENANT & SUPERADMIN VISIBILITY GATE
-	if userClientID != 1 {
-		query = query.Where("client_id = ?", userClientID)
+	if clientID != 1 {
+		query = query.Where("client_id = ?", clientID)
 	} else {
 		// SuperAdmin: Allow filtering by specific client if requested
 		if targetClient := ctx.Query("client_id"); targetClient != "" {
@@ -68,14 +73,19 @@ func (ctr *Controller) ListLedger(ctx *gin.Context) {
 
 // ListMpesaTransactions returns the history of Top-Up attempts with pagination
 func (ctr *Controller) ListMpesaTransactions(ctx *gin.Context) {
-	userClientID := ctx.MustGet("client_id").(uint)
+	clientID, exists := getClientID(ctx)
+	if !exists {
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized"})
+	}
 	page, pageSize, offset := getPaginationParams(ctx)
 
 	query := ctr.DB.Model(&models.MpesaTransaction{})
 
 	// MULTI-TENANT & SUPERADMIN VISIBILITY GATE
-	if userClientID != 1 {
-		query = query.Where("client_id = ?", userClientID)
+	if clientID != 1 {
+		query = query.Where("client_id = ?", clientID)
 	} else {
 		if targetClient := ctx.Query("client_id"); targetClient != "" {
 			query = query.Where("client_id = ?", targetClient)
@@ -127,9 +137,11 @@ func (ctr *Controller) ListMpesaTransactions(ctx *gin.Context) {
 
 // AdminWalletSummary provides a high-level system overview for SuperAdmins
 func (ctr *Controller) AdminWalletSummary(ctx *gin.Context) {
-	if ctx.MustGet("client_id").(uint) != 1 {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "SuperAdmin access required"})
-		return
+	clientID, exists := getClientID(ctx)
+	if !exists || clientID != 1 {
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized"})
 	}
 
 	// Optional client filter for the summary

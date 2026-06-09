@@ -81,7 +81,7 @@ func RegisterRoutes(r *gin.Engine, app *App) {
 	// ==========================================
 	api := r.Group("/api/v1")
 	// Enforce HMAC Signature for all requests coming from BFF or Internal Microservices
-	api.Use(middleware.VerifySignature(app.Config.InternalServiceToken))
+	api.Use(middleware.VerifySignature(app.Config.InternalServiceToken, app.Redis))
 
 	// --- Internal M2M Microservice Routes (SMS Engine) ---
 	// No JWT needed here, the HMAC signature (above) acts as the Service Token
@@ -118,9 +118,12 @@ func (a *App) RegisterWalletRoutes(rg *gin.RouterGroup) {
 
 	// SuperAdmin Wallet Tools (Requires ClientID == 1, handled in controllers)
 	adminWallet := rg.Group("/admin/wallet")
-	adminWallet.Use(middleware.RoleAuth("manage billing")) // Restrict to financial admins
+	adminWallet.Use(middleware.RoleAuth("manage wallet")) // Restrict to financial admins
 	{
 		adminWallet.POST("/adjust", a.ManualAdjustment)
+	}
+	adminWallet.Use(middleware.RoleAuth("manage billing")) // Restrict to financial admins
+	{
 		adminWallet.PUT("/config/:id", a.UpdateClientConfig)
 	}
 	adminWallet.Use(middleware.RoleAuth("read billing"))

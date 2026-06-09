@@ -20,15 +20,11 @@ type AppConfig struct {
 	RedisPassword string
 	RedisDB       int
 
-	LogLevel      string
-	LogsDir       string
-	LogFilename   string
-	LogMaxSize    int
-	LogMaxBackups int
-	LogMaxAge     int
-	LogCompress   bool
-	LogToConsole  bool
-	LogBucket     string // GCS bucket name for logs
+	//Service URLs
+	IdentityServiceURL string
+	SMSServiceURL      string
+	WalletServiceURL   string
+	SDPServiceURL      string
 
 	// Security
 	JWTSecret            string

@@ -61,7 +61,7 @@ func main() {
 	r := app.SetupRouter()
 
 	addr := cfg.ServerHost + ":" + cfg.ServerPort
-	logrus.Infof("🚀 Identity API starting on %s", addr)
+	logrus.Infof("🚀 Wallet API starting on %s", addr)
 
 	// Initialize standard HTTP Server
 	srv := &http.Server{
