@@ -24,9 +24,16 @@ func VerifySignature(secret string, rdb *redis.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Read Nonce
+		nonce := c.Request.Header.Get("X-Nonce")
+		if nonce == "" {
+			c.AbortWithStatusJSON(401, gin.H{"error": "missing nonce"})
+			return
+		}
+
 		// 2. Reject if request is older than 30 seconds
 		age := time.Now().Unix() - ts
-		if age > 30 || age < -5 { // -5 tolerates minor clock skew
+		if age > 30 || age < -5 {
 			c.AbortWithStatusJSON(401, gin.H{"error": "request timestamp expired"})
 			return
 		}
@@ -35,9 +42,12 @@ func VerifySignature(secret string, rdb *redis.Client) gin.HandlerFunc {
 		body, _ := io.ReadAll(c.Request.Body)
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		// 4. Verify HMAC — now signs timestamp+body, not just body
+		// 4. Verify HMAC — now signs timestamp + nonce + body!
 		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write([]byte(fmt.Sprintf("%s.%s", tsHeader, string(body))))
+
+		// Format matches Node.js: timestamp + nonce + body
+		mac.Write([]byte(fmt.Sprintf("%s.%s.%s", tsHeader, nonce, string(body))))
+
 		expected := hex.EncodeToString(mac.Sum(nil))
 		incoming := c.Request.Header.Get("X-Signature")
 
@@ -46,7 +56,7 @@ func VerifySignature(secret string, rdb *redis.Client) gin.HandlerFunc {
 			return
 		}
 
-		// 5. Nonce check — has this exact signature been used before?
+		// 5. Nonce check — Use the signature as the key (since it's now guaranteed unique)
 		nonceKey := fmt.Sprintf("nonce:sig:%s", incoming)
 		set, err := rdb.SetNX(context.Background(), nonceKey, 1, 60*time.Second).Result()
 		if err != nil || !set {
