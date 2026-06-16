@@ -101,6 +101,7 @@ func RegisterRoutes(r *gin.Engine, app *App) {
 func (a *App) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	wallet := rg.Group("/wallet")
 	{
+		wallet.GET("/balance", a.InternalBalanceCampaign)
 		wallet.POST("/deduct", a.InternalDeductCampaign)
 		wallet.POST("/refund", a.InternalRefundCampaign)
 	}

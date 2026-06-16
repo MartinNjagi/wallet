@@ -1,5 +1,9 @@
 package data
 
+type BalanceCreditRequest struct {
+	ClientID uint64 `json:"client_id"`
+}
+
 type DeductCreditRequest struct {
 	ClientID   uint   `json:"client_id"`
 	Amount     uint   `json:"amount"`

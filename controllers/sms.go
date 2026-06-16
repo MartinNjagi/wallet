@@ -4,7 +4,47 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"wallet/data"
+	"wallet/models"
 )
+
+func (ctr *Controller) InternalBalanceCampaign(ctx *gin.Context) {
+
+	var payload data.BalanceCreditRequest
+
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		SendJSON(ctx, data.APIResponse{
+			Status:  http.StatusBadRequest,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	targetClientID := payload.ClientID
+
+	var wallet models.Wallet
+	if err := ctr.DB.Where("client_id = ?", targetClientID).First(&wallet).Error; err != nil {
+		// Return 0 if they've never transacted
+		SendJSON(ctx, data.APIResponse{
+			Status: http.StatusOK,
+			Data: data.WalletBalanceResponse{
+				ClientID: int64(targetClientID),
+				Balance:  0,
+				Currency: data.DefaultCurrency,
+			},
+		})
+		return
+	}
+
+	resp := data.WalletBalanceResponse{
+		ClientID: int64(wallet.ClientID),
+		Balance:  wallet.Balance,
+		Currency: wallet.Currency,
+	}
+	SendJSON(ctx, data.APIResponse{
+		Status: http.StatusOK,
+		Data:   &resp,
+	})
+}
 
 func (ctr *Controller) InternalDeductCampaign(ctx *gin.Context) {
 	var payload data.DeductCreditRequest
