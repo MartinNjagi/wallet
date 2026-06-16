@@ -27,7 +27,7 @@ func (ctr *Controller) InternalBalanceCampaign(ctx *gin.Context) {
 		SendJSON(ctx, data.APIResponse{
 			Status: http.StatusOK,
 			Data: data.WalletBalanceResponse{
-				ClientID: int64(targetClientID),
+				ClientID: 0,
 				Balance:  0,
 				Currency: data.DefaultCurrency,
 			},
