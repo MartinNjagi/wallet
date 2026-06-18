@@ -13,8 +13,8 @@ const (
 type WalletAction string
 
 const (
-	WalletActionCredit WalletAction = "credit"
-	WalletActionDebit  WalletAction = "debit"
+	WalletActionCredit WalletAction = "CREDIT"
+	WalletActionDebit  WalletAction = "DEBIT"
 )
 
 const DefaultCurrency = "KES"
