@@ -52,10 +52,13 @@ func main() {
 	// Initialize Connections
 	db := connections.InitDB(cfg)
 	rdc := connections.InitRedis()
-
+	s3Client, err := connections.InitStorageClient(ctx, cfg)
+	if err != nil {
+		logrus.Fatalf("Failed to initialize MinIO Client: %v", err)
+	}
 	// Initialize Application Container
 	var app routers.App
-	app.Initialize(ctx, cfg, db, rdc)
+	app.Initialize(ctx, cfg, db, rdc, s3Client)
 
 	// Start Gin Server
 	r := app.SetupRouter()

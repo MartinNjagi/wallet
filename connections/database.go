@@ -64,7 +64,10 @@ func autoMigrate(DB *gorm.DB) {
 		&models.Wallet{},
 		&models.WalletTransaction{},
 		&models.ClientBillingConfig{},
-		&models.MpesaTransaction{}, &models.AuditLog{},
+		&models.MpesaTransaction{},
+		&models.C2BTransaction{},
+		&models.BankTransaction{},
+		&models.AuditLog{},
 	)
 
 	if err != nil {

@@ -29,3 +29,29 @@ type WalletOperation struct {
 	FiatPaid    *float64
 	Currency    *string
 }
+
+// --- Bank Transfer Requests ---
+
+type SubmitBankTransferRequest struct {
+	Amount          float64 `json:"amount" binding:"required,gt=0"`
+	ReferenceNumber string  `json:"reference_number" binding:"required"`
+	ProofURL        string  `json:"proof_url"` // Optional S3 link to uploaded receipt
+}
+
+type ApproveBankTransferRequest struct {
+	Status      string `json:"status" binding:"required,oneof=APPROVED REJECTED"`
+	Description string `json:"description"`
+}
+
+// --- Daraja C2B Payloads ---
+
+type C2BValidationPayload struct {
+	TransactionType   string `json:"TransactionType"`
+	TransID           string `json:"TransID"`
+	TransTime         string `json:"TransTime"`
+	TransAmount       string `json:"TransAmount"`
+	BusinessShortCode string `json:"BusinessShortCode"`
+	BillRefNumber     string `json:"BillRefNumber"` // We map this to ClientID
+	MSISDN            string `json:"MSISDN"`
+	FirstName         string `json:"FirstName"`
+}

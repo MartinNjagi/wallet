@@ -41,6 +41,15 @@ func InitConfig() *data.AppConfig {
 
 		SenderID: mustGetEnv("SENDER_ID"),
 
+		AWSRegion:          getEnv("AWS_REGION", ""),
+		AWSAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
+		AWSSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
+		S3Bucket:           getEnv("S3_BUCKET", ""),
+
+		MinioEndpoint:  getEnv("S3_ENDPOINT", ""),
+		MinioAccessKey: getEnv("S3_ACCESS_KEY", ""),
+		MinioSecretKey: getEnv("S3_SECRET_KEY", ""),
+
 		IdentityServiceURL: mustGetEnv("IDENTITY_SERVICE_URL"),
 		WalletServiceURL:   mustGetEnv("WALLET_SERVICE_URL"),
 		SDPServiceURL:      mustGetEnv("SDP_SERVICE_URL"),

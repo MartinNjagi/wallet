@@ -3,6 +3,7 @@ package controllers
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"strconv"
 	"wallet/data"
 	"wallet/models"
 )
@@ -19,10 +20,10 @@ func (ctr *Controller) InternalBalanceCampaign(ctx *gin.Context) {
 		return
 	}
 
-	targetClientID := payload.ClientID
+	targetClientID, _ := strconv.Atoi(payload.ClientID)
 
 	var wallet models.Wallet
-	if err := ctr.DB.Where("client_id = ?", targetClientID).First(&wallet).Error; err != nil {
+	if err := ctr.DB.Where("client_id = ?", uint(targetClientID)).First(&wallet).Error; err != nil {
 		// Return 0 if they've never transacted
 		SendJSON(ctx, data.APIResponse{
 			Status: http.StatusOK,

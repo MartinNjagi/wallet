@@ -15,3 +15,5 @@ func (a *App) UpdateClientConfig(c *gin.Context) { a.Controller.UpdateClientConf
 // @Summary Read allSummary Data
 // @Tags Admin Wallet
 func (a *App) AdminWalletSummary(c *gin.Context) { a.Controller.AdminWalletSummary(c) }
+
+func (a *App) ApproveBankTransfer(c *gin.Context) { a.Controller.ApproveBankTransfer(c) }

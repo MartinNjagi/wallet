@@ -3,9 +3,10 @@ package controllers
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
+	"time"
+	"wallet/library"
 
 	"wallet/data"
 	"wallet/models"
@@ -60,29 +61,44 @@ func (ctr *Controller) GetBalance(ctx *gin.Context) {
 	})
 }
 
-// InitiateTopUp triggers the M-Pesa STK push after calculating exchange rates
 func (ctr *Controller) InitiateTopUp(ctx *gin.Context) {
-	clientID := ctx.MustGet("client_id").(uint)
-
-	var req data.InitiateTopUpRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+	// 1. Authenticate: Get Client ID from JWT
+	clientID, exists := getClientID(ctx)
+	if !exists {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusUnauthorized, Message: "Unauthorized"})
 		return
 	}
 
-	// 1. Get Client's Rate
+	var req data.InitiateTopUpRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusBadRequest, Message: err.Error()})
+		return
+	}
+
+	// 2. Rate Limiting: 1 request per 60 seconds per client using Redis SETNX
+	rateLimitKey := fmt.Sprintf("stk_limit:client:%d", clientID)
+	set, err := ctr.Redis.SetNX(ctx.Request.Context(), rateLimitKey, 1, 60*time.Second).Result()
+	if err != nil || !set {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusTooManyRequests, Message: "Please wait 60 seconds before requesting another M-PESA prompt."})
+		return
+	}
+
+	// 3. Generate Secure Reference (Decoupled from DB IDs)
+	secureRef := library.GenerateSecureRef(7)
+
+	// 4. Calculate Credits (from wallet config)
 	var config models.ClientBillingConfig
 	ctr.DB.Where("client_id = ?", clientID).FirstOrCreate(&config, models.ClientBillingConfig{ClientID: clientID, BaseSmsRate: 1.0})
-
-	// 2. Calculate Credits
 	credits := int64(req.Amount / config.BaseSmsRate)
 
-	// 3. Fire to M-Pesa API (Mocked here)
-	checkoutRequestID := fmt.Sprintf("ws_CO_%s", generateSecureToken(8)) // Mock ID from Safaricom
+	// 5. Fire STK Push to Daraja (Use secureRef as AccountReference)
+	// mockCheckoutID := ctr.CallSafaricomSTK(req.Phone, req.Amount, secureRef)
+	checkoutRequestID := fmt.Sprintf("ws_CO_%s", library.GenerateSecureRef(8))
 
-	// 4. Record Pending Transaction for Cron reconciliation
+	// 6. Save Intent to DB
 	mpesaTx := models.MpesaTransaction{
 		ClientID:          clientID,
+		SecureReference:   secureRef,
 		CheckoutRequestID: checkoutRequestID,
 		Amount:            req.Amount,
 		Credits:           credits,
@@ -90,72 +106,42 @@ func (ctr *Controller) InitiateTopUp(ctx *gin.Context) {
 	}
 	ctr.DB.Create(&mpesaTx)
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":             "STK Push Initiated",
-		"checkout_request_id": checkoutRequestID,
-		"expected_credits":    credits,
+	// 7. Return Response with Fallback Instructions
+	SendJSON(ctx, data.APIResponse{
+		Status:  http.StatusOK,
+		Message: fmt.Sprintf("Payment prompt sent. If it fails, use Paybill %s with Account No: %s", ctr.Config.PaybillNumber, secureRef),
+		Data: map[string]string{
+			"checkout_request_id": checkoutRequestID,
+			"account_reference":   secureRef,
+		},
 	})
 }
 
-// MpesaWebhook receives IPN from Safaricom
-// Idempotent and highly concurrent safe.
-func (ctr *Controller) MpesaWebhook(ctx *gin.Context) {
-	// 1. Parse Callback (Mock format)
-	var callback struct {
-		Body struct {
-			StkCallback struct {
-				CheckoutRequestID string `json:"CheckoutRequestID"`
-				ResultCode        int    `json:"ResultCode"`
-			} `json:"stkCallback"`
-		} `json:"Body"`
-	}
-	if err := ctx.ShouldBindJSON(&callback); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid format"})
+// MpesaValidation accepts or rejects a Paybill payment before it completes.
+func (ctr *Controller) MpesaValidation(ctx *gin.Context) {
+	var payload data.C2BValidationPayload
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 1, "ResultDesc": "Invalid payload", "ThirdPartyTransID": 0})
 		return
 	}
 
-	reqID := callback.Body.StkCallback.CheckoutRequestID
-	success := callback.Body.StkCallback.ResultCode == 0
-
-	// 2. Update Mpesa Log
-	var mpesaTx models.MpesaTransaction
-	if err := ctr.DB.Where("checkout_request_id = ?", reqID).First(&mpesaTx).Error; err != nil {
-		ctx.Status(http.StatusOK) // Always 200 back to Safaricom
+	// Validate the BillRefNumber (Ensure it belongs to an actual client)
+	clientID, err := strconv.ParseUint(payload.BillRefNumber, 10, 32)
+	if err != nil {
+		// Reject payment if they didn't type a valid numeric Client ID
+		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 1, "ResultDesc": "Invalid Account Number", "ThirdPartyTransID": 0})
 		return
 	}
 
-	// 3. If failed, just update status and exit
-	if !success {
-		ctr.DB.Model(&mpesaTx).Update("status", "FAILED")
-		ctx.Status(http.StatusOK)
+	var count int64
+	ctr.DB.Model(&models.Wallet{}).Where("client_id = ?", clientID).Count(&count)
+	if count == 0 {
+		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 1, "ResultDesc": "Client Account not found", "ThirdPartyTransID": 0})
 		return
 	}
 
-	// 4. If success, credit the wallet using the Core Ledger Engine!
-	err := ctr.ApplyWalletOperation(
-		ctr.DB, data.WalletOperation{
-			ClientID:    mpesaTx.ClientID,
-			Action:      data.WalletActionCredit,
-			Credits:     mpesaTx.Credits,
-			Type:        data.RefPrefixMpesa,
-			Description: "M-Pesa STK Top Up",
-			Reference:   mpesaTx.CheckoutRequestID,
-			FiatPaid:    Float64Ptr(mpesaTx.Amount),
-			Currency:    StringPtr(data.DefaultCurrency),
-		},
-	)
-
-	if err == nil {
-		// Mark Safaricom transaction as finalized
-		ctr.DB.Model(&mpesaTx).Updates(map[string]interface{}{
-			"status":         "SUCCESS",
-			"receipt_number": "RGT45MOCK", // Mock extraction from IPN data
-		})
-	} else {
-		logrus.Errorf("Wallet Credit Failed for STK %s: %v", reqID, err)
-	}
-
-	ctx.Status(http.StatusOK)
+	// Accept
+	ctx.JSON(http.StatusOK, gin.H{"ResultCode": 0, "ResultDesc": "Accepted", "ThirdPartyTransID": 0})
 }
 
 // Admin Tools below: Require userClientID == 1

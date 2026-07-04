@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -16,10 +17,11 @@ import (
 
 // Controller holds the injected dependencies for authentication logic
 type Controller struct {
-	Config *data.AppConfig
-	DB     *gorm.DB
-	Redis  *redis.Client
-	Ctx    context.Context
+	Config   *data.AppConfig
+	DB       *gorm.DB
+	Redis    *redis.Client
+	Ctx      context.Context
+	S3Client *s3.Client // <-- NEW
 }
 
 // SendJSON is a convenience wrapper for handlers

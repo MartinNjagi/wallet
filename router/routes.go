@@ -2,6 +2,7 @@ package routers
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"wallet/middleware"
@@ -15,15 +16,16 @@ import (
 
 // App acts as the central DI container for your routers
 type App struct {
-	Ctx        context.Context
-	Config     *data.AppConfig
-	DB         *gorm.DB
-	Redis      *redis.Client
+	Ctx    context.Context
+	Config *data.AppConfig
+	DB     *gorm.DB
+	Redis  *redis.Client
+
 	Controller *controllers.Controller
 }
 
 // Initialize populates the App instance with active connections
-func (a *App) Initialize(ctx context.Context, cfg *data.AppConfig, db *gorm.DB, rdc *redis.Client) {
+func (a *App) Initialize(ctx context.Context, cfg *data.AppConfig, db *gorm.DB, rdc *redis.Client, s3Client *s3.Client) {
 	a.Ctx = ctx
 	a.Config = cfg
 	a.DB = db
@@ -31,10 +33,11 @@ func (a *App) Initialize(ctx context.Context, cfg *data.AppConfig, db *gorm.DB, 
 
 	// Inject all connections into the Controller
 	a.Controller = &controllers.Controller{
-		Ctx:    ctx,
-		DB:     db,
-		Redis:  rdc,
-		Config: cfg,
+		Ctx:      ctx,
+		DB:       db,
+		Redis:    rdc,
+		Config:   cfg,
+		S3Client: s3Client,
 	}
 }
 func (a *App) SetupRouter() *gin.Engine {
@@ -72,8 +75,13 @@ func RegisterRoutes(r *gin.Engine, app *App) {
 	// ==========================================
 	webhooks := r.Group("/webhooks")
 	{
-		// Safaricom doesn't sign with our HMAC, so it must be outside the secure group
-		webhooks.POST("/mpesa", app.MpesaWebhook)
+		webhooks.POST("/mpesa", app.MpesaWebhook)              // STK Callback
+		webhooks.POST("/mpesa/validate", app.MpesaValidation)  // C2B Validate
+		webhooks.POST("/mpesa/confirm", app.MpesaConfirmation) // C2B Confirm
+
+		// NEW: Transaction Status Webhooks
+		webhooks.POST("/mpesa/tx-status", app.TxStatusWebhook)
+		webhooks.POST("/mpesa/tx-timeout", app.TxTimeoutWebhook)
 	}
 
 	// ==========================================
@@ -101,7 +109,7 @@ func RegisterRoutes(r *gin.Engine, app *App) {
 func (a *App) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	wallet := rg.Group("/wallet")
 	{
-		wallet.GET("/balance", a.InternalBalanceCampaign)
+		wallet.POST("/balance", a.InternalBalanceCampaign)
 		wallet.POST("/deduct", a.InternalDeductCampaign)
 		wallet.POST("/refund", a.InternalRefundCampaign)
 	}
@@ -110,18 +118,22 @@ func (a *App) RegisterInternalRoutes(rg *gin.RouterGroup) {
 // RegisterWalletRoutes handles the Wallet Dashboard & Admin actions
 func (a *App) RegisterWalletRoutes(rg *gin.RouterGroup) {
 	wallet := rg.Group("/wallet")
-	wallet.Use(middleware.RoleAuth("read wallet")) // Ensure user has basic wallet access
+	wallet.Use(middleware.RoleAuth("read wallet"))
 	{
 		wallet.GET("/balance", a.GetBalance)
 		wallet.GET("/ledger", a.ListLedger)
 		wallet.POST("/topup", a.InitiateTopUp)
+		wallet.POST("/bank-transfer", a.SubmitBankTransfer) // <-- NEW
+		// NEW: Client submits a claim for a missing payment
+		wallet.POST("/claim-mpesa", a.ClaimMpesaPayment)
 	}
 
-	// SuperAdmin Wallet Tools (Requires ClientID == 1, handled in controllers)
+	// SuperAdmin Wallet Tools
 	adminWallet := rg.Group("/admin/wallet")
-	adminWallet.Use(middleware.RoleAuth("manage wallet")) // Restrict to financial admins
+	adminWallet.Use(middleware.RoleAuth("manage wallet"))
 	{
 		adminWallet.POST("/adjust", a.ManualAdjustment)
+		adminWallet.POST("/bank-transfer/:id/approve", a.ApproveBankTransfer) // <-- NEW
 	}
 	adminWallet.Use(middleware.RoleAuth("manage billing")) // Restrict to financial admins
 	{

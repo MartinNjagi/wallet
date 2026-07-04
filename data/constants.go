@@ -18,3 +18,9 @@ const (
 )
 
 const DefaultCurrency = "KES"
+
+const (
+	STKStatusPending = 0
+	STKStatusSuccess = 1
+	STKStatusFailed  = 2
+)
