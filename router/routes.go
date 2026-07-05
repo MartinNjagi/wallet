@@ -73,13 +73,14 @@ func RegisterRoutes(r *gin.Engine, app *App) {
 	// ==========================================
 	// 1. PUBLIC WEBHOOKS (No HMAC, No Auth)
 	// ==========================================
-	webhooks := r.Group("/webhooks")
+	webhooks := r.Group("/webhooks/:secret")
+	webhooks.Use(middleware.DarajaWebhookGuard())
 	{
 		webhooks.POST("/mpesa", app.MpesaWebhook)              // STK Callback
 		webhooks.POST("/mpesa/validate", app.MpesaValidation)  // C2B Validate
 		webhooks.POST("/mpesa/confirm", app.MpesaConfirmation) // C2B Confirm
 
-		// NEW: Transaction Status Webhooks
+		// Transaction Status Webhooks
 		webhooks.POST("/mpesa/tx-status", app.TxStatusWebhook)
 		webhooks.POST("/mpesa/tx-timeout", app.TxTimeoutWebhook)
 	}

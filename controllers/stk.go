@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 	"wallet/data"
 	"wallet/library"
@@ -75,7 +74,6 @@ func (ctr *Controller) CallSafaricomSTK(ctx context.Context, stk data.STKPushReq
 	consumerKey := os.Getenv("c2b_consumer_key")
 	consumerSecret := os.Getenv("c2b_consumer_secret")
 	mpesaExpressUrl := os.Getenv("mpesa_stk_push_endpoint")
-	mpesaExpressCallbackUrl := os.Getenv("mpesa_stk_push_callback")
 
 	// Get access token
 	accessToken, err := ctr.getAccessToken(ctx, shortCode, consumerKey, consumerSecret)
@@ -84,8 +82,11 @@ func (ctr *Controller) CallSafaricomSTK(ctx context.Context, stk data.STKPushReq
 	}
 
 	// Construct callback URL
-	callbackURL := strings.Replace(mpesaExpressCallbackUrl, "{transactionID}", fmt.Sprintf("%d", stk.StkID), 1)
+	baseURL := os.Getenv("MPESA_WEBHOOK_HOST")
+	secret := os.Getenv("MPESA_WEBHOOK_SECRET")
 
+	// Note: M-Pesa requires HTTPS for production callbacks
+	callbackURL := fmt.Sprintf("%s/api/v1/webhooks/%s/mpesa", baseURL, secret)
 	// Build password
 	timestamp := library.MpesaTimestamp()
 	auth := fmt.Sprintf("%s%s%s", shortCode, passKey, timestamp)

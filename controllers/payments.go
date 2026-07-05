@@ -19,12 +19,14 @@ func (ctr *Controller) RegisterC2BUrls(c *gin.Context) {
 	shortCode := os.Getenv("c2b_paybill")
 	consumerKey := os.Getenv("c2b_consumer_key")
 	consumerSecret := os.Getenv("c2b_consumer_secret")
+	baseURL := os.Getenv("MPESA_WEBHOOK_HOST")
+	secret := os.Getenv("MPESA_WEBHOOK_SECRET")
 
 	payload := map[string]string{
 		"ShortCode":       shortCode,
 		"ResponseType":    "Completed",
-		"ConfirmationURL": "https://lotvas.io/api/v1/payment/c2b/callback/Qp9Xy72BdLA6mF0s",
-		"ValidationURL":   "https://lotas.io/api/v1/payment/c2b/validation",
+		"ConfirmationURL": fmt.Sprintf("%s/api/v1/webhooks/%s/mpesa/confirm", baseURL, secret),
+		"ValidationURL":   fmt.Sprintf("%s/api/v1/webhooks/%s/mpesa/validate", baseURL, secret),
 	}
 	// Get access token
 	token, err := ctr.getAccessToken(ctx, shortCode, consumerKey, consumerSecret)
