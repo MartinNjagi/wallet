@@ -146,28 +146,22 @@ func (ctr *Controller) MpesaValidation(ctx *gin.Context) {
 
 // Admin Tools below: Require userClientID == 1
 
-// ManualAdjustment allows SuperAdmins to fix billing errors or give promos
-// @Summary SuperAdmin Manual Adjustments
+// ManualAdjustment SuperAdmin Manual Adjustments
 func (ctr *Controller) ManualAdjustment(ctx *gin.Context) {
 	if ctx.MustGet("client_id").(uint) != 1 {
-		SendJSON(ctx, data.APIResponse{
-			Status:  http.StatusForbidden,
-			Message: "SuperAdmin access required",
-		})
+		SendJSON(ctx, data.APIResponse{Status: http.StatusForbidden, Message: "SuperAdmin access required"})
 		return
 	}
 
 	var req data.ManualAdjustmentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		SendJSON(ctx, data.APIResponse{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid payload",
-		})
+		SendJSON(ctx, data.APIResponse{Status: http.StatusBadRequest, Message: "Invalid payload"})
 		return
 	}
 
 	// Unique ref ID based on timestamp and Admin ID
-	adminID := ctx.GetUint("user_id")
+	adminID := ctx.MustGet("user_id").(uint)
+	adminName := ctx.GetString("username")
 	refID := fmt.Sprintf("%d_%s", adminID, generateSecureToken(6))
 
 	err := ctr.ApplyWalletOperation(ctr.DB, data.WalletOperation{
@@ -182,41 +176,42 @@ func (ctr *Controller) ManualAdjustment(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		SendJSON(ctx, data.APIResponse{
-			Status:  http.StatusInternalServerError,
-			Message: err.Error(),
-		})
+		SendJSON(ctx, data.APIResponse{Status: http.StatusInternalServerError, Message: err.Error()})
 		return
 	}
 
-	SendJSON(ctx, data.APIResponse{
-		Status:  http.StatusOK,
-		Message: "Wallet adjusted successfully",
+	// Log Audit
+	_ = ctr.LogAudit(nil, data.AuditLogParams{
+		UserID:          adminID,
+		Username:        adminName,
+		Action:          "MANUAL_WALLET_ADJUSTMENT",
+		NewData:         req,
+		PerformedBy:     &adminID,
+		PerformedByName: &adminName,
+		IPAddress:       ctx.ClientIP(),
 	})
+
+	SendJSON(ctx, data.APIResponse{Status: http.StatusOK, Message: "Wallet adjusted successfully"})
 }
 
 // UpdateClientConfig allows admins to modify individual tenant SMS rates
 func (ctr *Controller) UpdateClientConfig(ctx *gin.Context) {
 	if ctx.MustGet("client_id").(uint) != 1 {
-		SendJSON(ctx, data.APIResponse{
-			Status:  http.StatusForbidden,
-			Message: "SuperAdmin access required",
-		})
+		SendJSON(ctx, data.APIResponse{Status: http.StatusForbidden, Message: "SuperAdmin access required"})
 		return
 	}
 
 	targetClientID := ctx.Param("id")
 	var req data.UpdateBillingConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		SendJSON(ctx, data.APIResponse{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid payload",
-		})
+		SendJSON(ctx, data.APIResponse{Status: http.StatusBadRequest, Message: "Invalid payload"})
 		return
 	}
 
 	var config models.ClientBillingConfig
 	ctr.DB.Where("client_id = ?", targetClientID).FirstOrCreate(&config, models.ClientBillingConfig{ClientID: 1, BaseSmsRate: 1.0})
+
+	oldConfig := config // Copy for audit log
 
 	if req.BaseSmsRate != nil {
 		config.BaseSmsRate = *req.BaseSmsRate
@@ -227,8 +222,19 @@ func (ctr *Controller) UpdateClientConfig(ctx *gin.Context) {
 
 	ctr.DB.Save(&config)
 
-	SendJSON(ctx, data.APIResponse{
-		Status:  http.StatusOK,
-		Message: "Client billing configuration updated",
+	// Log Audit
+	adminID := ctx.MustGet("user_id").(uint)
+	adminName := ctx.GetString("username")
+	_ = ctr.LogAudit(nil, data.AuditLogParams{
+		UserID:          adminID,
+		Username:        adminName,
+		Action:          "UPDATE_BILLING_CONFIG",
+		OldData:         oldConfig,
+		NewData:         config,
+		PerformedBy:     &adminID,
+		PerformedByName: &adminName,
+		IPAddress:       ctx.ClientIP(),
 	})
+
+	SendJSON(ctx, data.APIResponse{Status: http.StatusOK, Message: "Client billing configuration updated"})
 }

@@ -135,7 +135,8 @@ func (a *App) RegisterWalletRoutes(rg *gin.RouterGroup) {
 	adminWallet.Use(middleware.RoleAuth("manage wallet"))
 	{
 		adminWallet.POST("/adjust", a.ManualAdjustment)
-		adminWallet.POST("/bank-transfer/:id/approve", a.ApproveBankTransfer) // <-- NEW
+		adminWallet.GET("/bank-transfers", a.ListBankTransfers)
+		adminWallet.POST("/bank-transfer/:id/approve", a.ApproveBankTransfer)
 	}
 	adminWallet.Use(middleware.RoleAuth("manage billing")) // Restrict to financial admins
 	{

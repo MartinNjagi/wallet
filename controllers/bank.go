@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"wallet/data"
 	"wallet/models"
@@ -41,9 +42,47 @@ func (ctr *Controller) SubmitBankTransfer(ctx *gin.Context) {
 	SendJSON(ctx, data.APIResponse{Status: http.StatusCreated, Message: "Bank transfer submitted for approval", Data: txn})
 }
 
+// ListBankTransfers (Admin facing)
+func (ctr *Controller) ListBankTransfers(ctx *gin.Context) {
+	if ctx.MustGet("client_id").(uint) != 1 {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusForbidden, Message: "SuperAdmin access required"})
+		return
+	}
+
+	page, pageSize, offset := getPaginationParams(ctx)
+
+	query := ctr.DB.Model(&models.BankTransaction{})
+	if status := ctx.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var transactions []models.BankTransaction
+	if err := query.Order("created_at desc").Offset(offset).Limit(pageSize).Find(&transactions).Error; err != nil {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusInternalServerError, Message: "Failed to load bank transfers"})
+		return
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+
+	SendJSON(ctx, data.APIResponse{
+		Status: http.StatusOK,
+		Data:   transactions,
+		Pagination: &data.PaginationMeta{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	})
+}
+
 // ApproveBankTransfer (Admin facing)
 func (ctr *Controller) ApproveBankTransfer(ctx *gin.Context) {
 	adminID := ctx.MustGet("user_id").(uint)
+	adminName := ctx.GetString("username")
 	txnID := ctx.Param("id")
 
 	var req data.ApproveBankTransferRequest
@@ -86,6 +125,18 @@ func (ctr *Controller) ApproveBankTransfer(ctx *gin.Context) {
 	ctr.DB.Model(&txn).Updates(map[string]interface{}{
 		"status":      req.Status,
 		"approved_by": adminID,
+	})
+
+	// Log Audit
+	_ = ctr.LogAudit(nil, data.AuditLogParams{
+		UserID:          adminID,
+		Username:        adminName,
+		Action:          "BANK_TRANSFER_REVIEW",
+		OldData:         map[string]interface{}{"status": "PENDING"},
+		NewData:         map[string]interface{}{"status": req.Status, "description": req.Description, "txn_id": txn.ID},
+		PerformedBy:     &adminID,
+		PerformedByName: &adminName,
+		IPAddress:       ctx.ClientIP(),
 	})
 
 	SendJSON(ctx, data.APIResponse{Status: http.StatusOK, Message: "Bank transfer " + req.Status})
