@@ -65,8 +65,9 @@ func autoMigrate(DB *gorm.DB) {
 		&models.WalletTransaction{},
 		&models.ClientBillingConfig{},
 		&models.MpesaTransaction{},
-		&models.C2BTransaction{},
-		&models.BankTransaction{},
+		&models.C2BTransaction{}, &models.STKPushRequest{},
+		&models.BankTransaction{}, &models.StripeTransaction{},
+		&models.MpesaDispute{},
 		&models.AuditLog{},
 	)
 

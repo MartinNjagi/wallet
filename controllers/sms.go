@@ -80,9 +80,23 @@ func (ctr *Controller) InternalDeductCampaign(ctx *gin.Context) {
 }
 
 func (ctr *Controller) InternalRefundCampaign(ctx *gin.Context) {
+	var payload data.RefundCreditRequest
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusBadRequest, Message: err.Error()})
+		return
+	}
 
-	SendJSON(ctx, data.APIResponse{
-		Status:  http.StatusOK,
-		Message: "Work In Progress",
-	})
+	if payload.Amount <= 0 {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusBadRequest, Message: "Amount must be greater than zero"})
+		return
+	}
+
+	// Call the actual refund processor you already wrote
+	err := ctr.ProcessCampaignRefund(payload)
+	if err != nil {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusInternalServerError, Message: err.Error()})
+		return
+	}
+
+	SendJSON(ctx, data.APIResponse{Status: http.StatusOK, Message: "Credits successfully refunded"})
 }

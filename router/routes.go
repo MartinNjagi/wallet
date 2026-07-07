@@ -84,7 +84,7 @@ func RegisterRoutes(r *gin.Engine, app *App) {
 		webhooks.POST("/mpesa/tx-status", app.TxStatusWebhook)
 		webhooks.POST("/mpesa/tx-timeout", app.TxTimeoutWebhook)
 	}
-
+	r.POST("/webhooks/stripe", app.Controller.StripeWebhook)
 	// ==========================================
 	// 2. SECURE INTERNAL & BFF API
 	// ==========================================
@@ -127,6 +127,7 @@ func (a *App) RegisterWalletRoutes(rg *gin.RouterGroup) {
 		wallet.POST("/bank-transfer", a.SubmitBankTransfer) // <-- NEW
 		// NEW: Client submits a claim for a missing payment
 		wallet.POST("/claim-mpesa", a.ClaimMpesaPayment)
+		wallet.POST("/stripe-topup", a.InitiateStripeTopUp)
 	}
 
 	// SuperAdmin Wallet Tools

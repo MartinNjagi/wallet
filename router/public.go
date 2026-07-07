@@ -14,7 +14,8 @@ func (a *App) ListLedger(c *gin.Context) { a.Controller.ListLedger(c) }
 
 // @Summary Initiate M-Pesa Top Up
 // @Tags Wallet
-func (a *App) InitiateTopUp(c *gin.Context) { a.Controller.InitiateTopUp(c) }
+func (a *App) InitiateTopUp(c *gin.Context)       { a.Controller.InitiateTopUp(c) }
+func (a *App) InitiateStripeTopUp(c *gin.Context) { a.Controller.InitiateStripeTopUp(c) }
 
 func (a *App) MpesaValidation(c *gin.Context)    { a.Controller.MpesaValidation(c) }
 func (a *App) MpesaConfirmation(c *gin.Context)  { a.Controller.MpesaConfirmation(c) }

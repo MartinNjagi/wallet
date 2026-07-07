@@ -96,3 +96,19 @@ type MpesaDispute struct {
 func (*MpesaDispute) TableName() string {
 	return "mpesa_disputes"
 }
+
+// StripeTransaction tracks Stripe checkout sessions
+type StripeTransaction struct {
+	gorm.Model
+	ClientID      uint
+	SessionID     string `gorm:"size:255;uniqueIndex"`
+	PaymentIntent string `gorm:"size:255;index"`
+	Amount        float64
+	Credits       int64
+	Currency      string
+	Status        string `gorm:"default:'PENDING'"`
+}
+
+func (*StripeTransaction) TableName() string {
+	return "stripe_transactions"
+}

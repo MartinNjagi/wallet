@@ -199,7 +199,7 @@ func (ctr *Controller) MpesaConfirmation(ctx *gin.Context) {
 	}
 
 	// 3. Apply to Ledger
-	ctr.ApplyWalletOperation(ctr.DB, data.WalletOperation{
+	err := ctr.ApplyWalletOperation(ctr.DB, data.WalletOperation{
 		ClientID:    uint(clientID),
 		Action:      data.WalletActionCredit,
 		Credits:     credits,
@@ -209,6 +209,10 @@ func (ctr *Controller) MpesaConfirmation(ctx *gin.Context) {
 		FiatPaid:    &amount,
 		Currency:    StringPtr(data.DefaultCurrency),
 	})
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 0, "ResultDesc": "Internal Ledger Error"})
+		return
+	}
 
 	ctx.JSON(http.StatusOK, gin.H{"ResultCode": "0", "ResultDesc": "Success"})
 }

@@ -15,6 +15,7 @@ require (
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/speps/go-hashids/v2 v2.0.1
+	github.com/stripe/stripe-go/v76 v76.25.0
 	github.com/swaggo/swag v1.16.6
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.1
