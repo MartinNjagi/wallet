@@ -15,7 +15,6 @@ import (
 // GetBalance returns the real-time active balance for the tenant
 // @Summary Client Wallet Balance
 func (ctr *Controller) GetBalance(ctx *gin.Context) {
-	// Use the same helper from ListLedger
 	tokenClientID, exists := getClientID(ctx)
 	if !exists {
 		SendJSON(ctx, data.APIResponse{
@@ -27,7 +26,7 @@ func (ctr *Controller) GetBalance(ctx *gin.Context) {
 
 	targetClientID := tokenClientID
 
-	// SUPERADMIN VISIBILITY GATE (Matches ListLedger logic)
+	// SUPERADMIN VISIBILITY GATE
 	if tokenClientID == 1 {
 		if targetQuery := ctx.Query("client_id"); targetQuery != "" {
 			if parsedID, err := strconv.ParseUint(targetQuery, 10, 32); err == nil {
@@ -38,23 +37,33 @@ func (ctr *Controller) GetBalance(ctx *gin.Context) {
 
 	var wallet models.Wallet
 	if err := ctr.DB.Where("client_id = ?", targetClientID).First(&wallet).Error; err != nil {
-		// Return 0 if they've never transacted
-		SendJSON(ctx, data.APIResponse{
-			Status: http.StatusOK,
-			Data: data.WalletBalanceResponse{
-				ClientID: int64(targetClientID),
-				Balance:  0,
-				Currency: data.DefaultCurrency,
-			},
-		})
-		return
+
+		// Auto-Create Wallet if it doesn't exist so we can generate the PaymentRef
+		friendlyRef, _ := library.GenerateFriendlyCode(uint64(targetClientID))
+
+		wallet = models.Wallet{
+			ClientID:   targetClientID,
+			PaymentRef: friendlyRef,
+			Balance:    0,
+			Currency:   data.DefaultCurrency,
+		}
+
+		if err := ctr.DB.Create(&wallet).Error; err != nil {
+			SendJSON(ctx, data.APIResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to initialize wallet account",
+			})
+			return
+		}
 	}
 
 	resp := data.WalletBalanceResponse{
-		ClientID: int64(wallet.ClientID),
-		Balance:  wallet.Balance,
-		Currency: wallet.Currency,
+		ClientID:   int64(wallet.ClientID),
+		PaymentRef: wallet.PaymentRef,
+		Balance:    wallet.Balance,
+		Currency:   wallet.Currency,
 	}
+
 	SendJSON(ctx, data.APIResponse{
 		Status: http.StatusOK,
 		Data:   &resp,
@@ -125,18 +134,10 @@ func (ctr *Controller) MpesaValidation(ctx *gin.Context) {
 		return
 	}
 
-	// Validate the BillRefNumber (Ensure it belongs to an actual client)
-	clientID, err := strconv.ParseUint(payload.BillRefNumber, 10, 32)
-	if err != nil {
-		// Reject payment if they didn't type a valid numeric Client ID
+	// Look up the Wallet using the friendly PaymentRef instead of casting to integer!
+	var wallet models.Wallet
+	if err := ctr.DB.Where("payment_ref = ?", payload.BillRefNumber).First(&wallet).Error; err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 1, "ResultDesc": "Invalid Account Number", "ThirdPartyTransID": 0})
-		return
-	}
-
-	var count int64
-	ctr.DB.Model(&models.Wallet{}).Where("client_id = ?", clientID).Count(&count)
-	if count == 0 {
-		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 1, "ResultDesc": "Client Account not found", "ThirdPartyTransID": 0})
 		return
 	}
 

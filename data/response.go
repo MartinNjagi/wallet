@@ -24,9 +24,10 @@ type PaginationMeta struct {
 }
 
 type WalletBalanceResponse struct {
-	ClientID int64  `json:"client_id"`
-	Balance  int64  `json:"balance"`
-	Currency string `json:"currency"`
+	ClientID   int64  `json:"client_id"`
+	PaymentRef string `json:"payment_ref"`
+	Balance    int64  `json:"balance"`
+	Currency   string `json:"currency"`
 }
 
 type WalletTransactionResponse struct {

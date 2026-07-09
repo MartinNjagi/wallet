@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"wallet/data"
+	"wallet/library"
 	"wallet/models"
 
 	"gorm.io/gorm"
@@ -55,7 +56,13 @@ func (ctr *Controller) ApplyWalletOperation(db *gorm.DB, op data.WalletOperation
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				// Initialize missing wallet on the fly
-				wallet = models.Wallet{ClientID: op.ClientID, Balance: 0}
+
+				// Generate a secure alphanumeric string for the user (e.g., "K8X9P2")
+				friendlyRef, _ := library.GenerateFriendlyCode(uint64(op.ClientID))
+				wallet = models.Wallet{
+					ClientID:   op.ClientID,
+					PaymentRef: friendlyRef,
+					Balance:    0}
 				if err := tx.Create(&wallet).Error; err != nil {
 					return fmt.Errorf("failed to create wallet: %v", err)
 				}

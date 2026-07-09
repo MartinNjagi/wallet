@@ -174,17 +174,23 @@ func (ctr *Controller) MpesaConfirmation(ctx *gin.Context) {
 		return
 	}
 
-	clientID, _ := strconv.ParseUint(payload.BillRefNumber, 10, 32)
 	amount, _ := strconv.ParseFloat(payload.TransAmount, 64)
+	// Look up Wallet to get the actual ClientID
+	var wallet models.Wallet
+	if err := ctr.DB.Where("payment_ref = ?", payload.BillRefNumber).First(&wallet).Error; err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"ResultCode": 0, "ResultDesc": "Client not found"})
+		return
+	}
 
+	clientID := wallet.ClientID
 	// 1. Get Client's Rate
 	var config models.ClientBillingConfig
-	ctr.DB.Where("client_id = ?", clientID).FirstOrCreate(&config, models.ClientBillingConfig{ClientID: uint(clientID), BaseSmsRate: 1.0})
+	ctr.DB.Where("client_id = ?", clientID).FirstOrCreate(&config, models.ClientBillingConfig{ClientID: clientID, BaseSmsRate: 1.0})
 	credits := int64(amount / config.BaseSmsRate)
 
 	// 2. Save C2B Record
 	txn := models.C2BTransaction{
-		ClientID:      uint(clientID),
+		ClientID:      clientID,
 		TransactionID: payload.TransID,
 		Amount:        amount,
 		Credits:       credits,

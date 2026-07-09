@@ -15,9 +15,10 @@ func (*WalletTransaction) TableName() string {
 // Wallet stores the current active balance of a client.
 type Wallet struct {
 	gorm.Model
-	ClientID uint   `gorm:"uniqueIndex;not null"`
-	Balance  int64  `gorm:"default:0"` // Storing credits as integers to avoid floating point errors
-	Currency string `gorm:"default:'KES'"`
+	ClientID   uint   `gorm:"uniqueIndex;not null"`
+	PaymentRef string `gorm:"size:20;uniqueIndex"`
+	Balance    int64  `gorm:"default:0"` // Storing credits as integers to avoid floating point errors
+	Currency   string `gorm:"default:'KES'"`
 }
 
 // WalletTransaction is the Immutable Ledger tracking every movement of credits.
