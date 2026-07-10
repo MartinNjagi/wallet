@@ -140,6 +140,7 @@ func (a *App) RegisterWalletRoutes(rg *gin.RouterGroup) {
 	}
 	adminWallet.Use(middleware.RoleAuth("manage billing")) // Restrict to financial admins
 	{
+		adminWallet.GET("/config/:id", a.GetClientConfig)
 		adminWallet.PUT("/config/:id", a.UpdateClientConfig)
 	}
 	adminWallet.Use(middleware.RoleAuth("read billing"))

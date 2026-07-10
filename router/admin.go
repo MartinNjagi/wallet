@@ -8,6 +8,10 @@ import "github.com/gin-gonic/gin"
 // @Tags Admin Wallet
 func (a *App) ManualAdjustment(c *gin.Context) { a.Controller.ManualAdjustment(c) }
 
+// @Summary Fetch Client Billing Config
+// @Tags Admin Wallet
+func (a *App) GetClientConfig(c *gin.Context) { a.Controller.GetClientConfig(c) }
+
 // @Summary Update Client Billing Config
 // @Tags Admin Wallet
 func (a *App) UpdateClientConfig(c *gin.Context) { a.Controller.UpdateClientConfig(c) }

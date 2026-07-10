@@ -239,3 +239,36 @@ func (ctr *Controller) UpdateClientConfig(ctx *gin.Context) {
 
 	SendJSON(ctx, data.APIResponse{Status: http.StatusOK, Message: "Client billing configuration updated"})
 }
+
+// GetClientConfig fetches the billing config for a specific tenant
+// @Summary Fetch Client Billing Config
+func (ctr *Controller) GetClientConfig(ctx *gin.Context) {
+	if ctx.MustGet("client_id").(uint) != 1 {
+		SendJSON(ctx, data.APIResponse{Status: http.StatusForbidden, Message: "SuperAdmin access required"})
+		return
+	}
+
+	targetClientID := ctx.Param("id")
+	clientID, _ := strconv.Atoi(targetClientID)
+	var config models.ClientBillingConfig
+	var clientResp data.ClientConfiguration
+
+	if err := ctr.DB.Where("client_id = ?", targetClientID).First(&config).Error; err != nil {
+		// If not found, return default fallback config
+		clientResp = data.ClientConfiguration{
+			ClientID:               uint(clientID),
+			BaseSMSRate:            1.0,
+			RefundOnFailedDelivery: true,
+		}
+	}
+
+	clientResp = data.ClientConfiguration{
+		ClientID:               config.ClientID,
+		BaseSMSRate:            config.BaseSmsRate,
+		RefundOnFailedDelivery: config.RefundOnFailedDelivery,
+	}
+	SendJSON(ctx, data.APIResponse{
+		Status: http.StatusOK,
+		Data:   clientResp,
+	})
+}
