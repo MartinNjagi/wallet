@@ -4,7 +4,8 @@ import "time"
 
 // ClientBillingConfig holds the wallet configurations for a specific tenant.
 type ClientBillingConfig struct {
-	ClientID               uint    `gorm:"primaryKey"`
+	ID                     uint    `gorm:"column:id;primaryKey;autoIncrement"`
+	ClientID               uint    `gorm:"uniqueIndex;not null"`
 	BaseSmsRate            float64 `gorm:"default:1.0"`  // Cost in KES per 1 SMS Credit
 	RefundOnFailedDelivery bool    `gorm:"default:true"` // Toggle for automatic refunds on failure
 }

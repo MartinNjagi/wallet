@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"net/http"
 	"strconv"
 	"time"
@@ -38,7 +39,7 @@ func (ctr *Controller) GetBalance(ctx *gin.Context) {
 	var wallet models.Wallet
 	if err := ctr.DB.Where("client_id = ?", targetClientID).First(&wallet).Error; err != nil {
 
-		// Auto-Create Wallet if it doesn't exist so we can generate the PaymentRef
+		// Generate the PaymentRef using hashids
 		friendlyRef, _ := library.GenerateFriendlyCode(uint64(targetClientID))
 
 		wallet = models.Wallet{
@@ -48,10 +49,50 @@ func (ctr *Controller) GetBalance(ctx *gin.Context) {
 			Currency:   data.DefaultCurrency,
 		}
 
-		if err := ctr.DB.Create(&wallet).Error; err != nil {
+		// Use a database transaction to safely create the wallet, the configuration, and the audit log
+		err := ctr.DB.Transaction(func(tx *gorm.DB) error {
+			// 1. Create the Wallet
+			if err := tx.Create(&wallet).Error; err != nil {
+				return err
+			}
+
+			// 2. Auto-Create default ClientBillingConfig alongside it
+			config := models.ClientBillingConfig{
+				ClientID:               targetClientID,
+				BaseSmsRate:            1.0,  // Standard default rate per SMS unit
+				RefundOnFailedDelivery: true, // Standard default logic
+			}
+			if err := tx.FirstOrCreate(&config, models.ClientBillingConfig{ClientID: targetClientID}).Error; err != nil {
+				return err
+			}
+
+			// 3. Extract the active user for the audit log
+			var userID uint
+			if uid, ok := ctx.Get("user_id"); ok {
+				userID = uid.(uint)
+			}
+			username := ctx.GetString("username")
+
+			// 4. Log Audit (Pass `tx` so it is part of the atomic transaction)
+			if err := ctr.LogAudit(tx, data.AuditLogParams{
+				UserID:          userID,
+				Username:        username,
+				Action:          "AUTO_INITIALIZE_WALLET_AND_CONFIG",
+				NewData:         map[string]interface{}{"wallet": wallet, "config": config},
+				PerformedBy:     &userID,
+				PerformedByName: &username,
+				IPAddress:       ctx.ClientIP(),
+			}); err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if err != nil {
 			SendJSON(ctx, data.APIResponse{
 				Status:  http.StatusInternalServerError,
-				Message: "Failed to initialize wallet account",
+				Message: "Failed to initialize wallet account or billing configuration",
 			})
 			return
 		}
